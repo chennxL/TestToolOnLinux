@@ -1,0 +1,64 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+spring:
+  application:
+    name: blacklist-test-tool
+  
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://192.168.0.210:3306/blacklist_test?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: 123456
+    hikari:
+      minimum-idle: 5
+      maximum-pool-size: 20
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+
+# MyBatis Plus 配置
+mybatis-plus:
+  configuration:
+    # 配置枚举类型处理器
+    default-enum-type-handler: org.apache.ibatis.type.EnumTypeHandler
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+  mapper-locations: classpath*:mapper/**/*.xml
+  type-enums-package: com.blacklist.enums
+
+
+# 日志配置
+logging:
+  level:
+    com.blacklist: debug
+    org.springframework: info
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{50} - %msg%n"
+
+# 自定义配置
+blacklist:
+  # 同态加密库路径（根据实际情况修改）
+  crypto:
+    library-path: /usr/local/lib/libcrypto.so
+  # 导出文件临时目录
+  export:
+    temp-dir: /tmp/blacklist-export
+
+grpc:
+  server:
+    address: 192.168.0.250  # C++服务器地址
+    port: 50051        # C++服务器端口
