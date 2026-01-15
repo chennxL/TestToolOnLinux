@@ -1,0 +1,6 @@
+services:
+  psigrpc:
+    image: psigrpc
+    restart: unless-stopped
+    ports:
+      - "50051:50051"

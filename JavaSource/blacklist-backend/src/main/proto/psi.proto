@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package psi;
+
+service PSIService {
+  // 1. 执行匹配并请求解密结果
+  rpc DoMatch (MatchRequest) returns (EncryptResponse) {}
+}
+
+message LabelsType {
+  repeated uint64 labels = 1;
+}
+
+message MatchRequest {
+  bytes context_data = 1;
+  bytes payload_data = 2;
+  map<uint64, LabelsType> srv_data = 3;
+  uint64 weight = 4;              // 新增
+  uint64 effective_lambda = 5;    // 新增
+  uint64 log_poly_mod = 6;        // 新增
+}
+
+message EncryptResponse {
+  bytes payload_data = 1;
+}
