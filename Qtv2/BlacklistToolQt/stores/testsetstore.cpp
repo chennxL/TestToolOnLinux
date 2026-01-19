@@ -9,6 +9,7 @@
 #include <QDebug>
 #include <QDir>
 #include <QStandardPaths>
+#include <QSet>
 
 TestSetStore::TestSetStore(QObject *parent)
     : QObject(parent)
@@ -123,29 +124,76 @@ void TestSetStore::createTestSet(int insideSize, int outsideSize)
                idCards.append(val.toString());
            }
            qDebug() << "收到测试集数据，数量：" << idCards.size();
+           
            // 🔥 保存原始测试集
            m_originalTestSet = idCards;
 
            // 🔥 保存库内身份证集合（最后一位是X的）
            m_insideIdCards.clear();
+           m_insideIdCardHashes.clear();  // 🆕 清空哈希映射表
+           
+           qDebug() << "";
+           qDebug() << "========== 📊 测试集创建统计 ==========";
+           
+           int actualInsideCount = 0;
+           int actualOutsideCount = 0;
+           
+           // 统计并保存库内数据
            for (const QString& idCard : idCards) {
                if (idCard.endsWith('X')) {
                    m_insideIdCards.insert(idCard);
+                   actualInsideCount++;
+                   
+                   // 🆕 计算并保存哈希值
+                   size_t hash = CryptoWrapper::hashIdCard(idCard);
+                   m_insideIdCardHashes[hash] = idCard;
+               } else {
+                   actualOutsideCount++;
                }
            }
-           qDebug() << "库内数量：" << m_insideIdCards.size();
-           qDebug() << "库外数量：" << (idCards.size() - m_insideIdCards.size());
-
-           // 🔥 添加详细日志
-           qDebug() << "========== Qt收到的测试集 ==========";
+           
            qDebug() << "总数：" << idCards.size();
-           for (int i = 0; i < idCards.size(); ++i) {
-               QString idCard = idCards[i];
-               size_t hash = CryptoWrapper::hashIdCard(idCard);
-               qDebug() << QString("[%1] 身份证: %2, 哈希: %3")
-                               .arg(i).arg(idCard).arg(hash);
+           qDebug() << "库内（以X结尾）：" << actualInsideCount;
+           qDebug() << "库外（非X结尾）：" << actualOutsideCount;
+           qDebug() << "====================================";
+           qDebug() << "";
+
+           // 🆕 检查哈希冲突
+           qDebug() << "========== 🔍 哈希冲突检查 ==========";
+           qDebug() << "库内身份证数量：" << m_insideIdCards.size();
+           qDebug() << "库内唯一哈希数量：" << m_insideIdCardHashes.size();
+           
+           if (m_insideIdCards.size() != m_insideIdCardHashes.size()) {
+               int collisionCount = m_insideIdCards.size() - m_insideIdCardHashes.size();
+               qWarning() << "⚠️ 检测到哈希冲突！冲突数量：" << collisionCount;
+               
+               // 找出冲突的身份证号
+               QMap<size_t, QStringList> hashCollisions;
+               for (const QString& idCard : m_insideIdCards) {
+                   size_t hash = CryptoWrapper::hashIdCard(idCard);
+                   hashCollisions[hash].append(idCard);
+               }
+               
+               qDebug() << "冲突详情：";
+               int conflictIndex = 0;
+               for (auto it = hashCollisions.begin(); it != hashCollisions.end(); ++it) {
+                   if (it.value().size() > 1) {
+                       conflictIndex++;
+                       qWarning() << QString("  冲突#%1 - 哈希值: %2 (0x%3)")
+                                         .arg(conflictIndex)
+                                         .arg(it.key())
+                                         .arg(it.key(), 0, 16);
+                       qWarning() << "    对应" << it.value().size() << "个身份证号：";
+                       for (const QString& idCard : it.value()) {
+                           qWarning() << "      -" << idCard;
+                       }
+                   }
+               }
+           } else {
+               qDebug() << "✓ 未检测到哈希冲突";
            }
            qDebug() << "====================================";
+           qDebug() << "";
 
            // 第二步：Qt端加密数据
            QString contextData;
@@ -177,7 +225,7 @@ void TestSetStore::createTestSet(int insideSize, int outsideSize)
            setTestSetSize(0, 0);
            emit testSetCreateFailed("生成测试集失败: " + error);
        }
-       );
+    );
 }
 
 void TestSetStore::queryBlacklist()
@@ -225,7 +273,7 @@ void TestSetStore::queryBlacklist()
             bool decryptSuccess = m_cryptoWrapper.decryptResultWithDetails(
                 encryptedResult,
                 matchedInfoList
-                );
+            );
 
             if (!decryptSuccess) {
                 setQueryStatus(QueryFailed);
@@ -233,26 +281,192 @@ void TestSetStore::queryBlacklist()
                 return;
             }
 
+            qDebug() << "";
             qDebug() << "========================================";
-            qDebug() << "解密成功，匹配信息详情：";
-            qDebug() << "----------------------------------------";
+            qDebug() << "解密成功";
+            qDebug() << "========================================";
+            qDebug() << "";
 
+            // 🆕 详细分析匹配结果
+            qDebug() << "========== 🔍 匹配结果详细分析 ==========";
+            qDebug() << "匹配结果数量：" << matchedInfoList.size();
+            
+            QSet<QString> matchedIdCards;  // 匹配到的身份证号集合（去重）
+            QMap<size_t, QString> matchedHashes;  // 匹配到的哈希值映射
+            QMap<QString, int> idCardCount;  // 统计每个身份证号出现的次数
+            
+            // 统计匹配结果
             for (int i = 0; i < matchedInfoList.size(); ++i) {
                 const auto& info = matchedInfoList[i];
-                qDebug() << "匹配[" << i << "]:";
-                qDebug() << "  身份证号:" << info.idCard;
-                qDebug() << "  行为评级:" << info.riskLevelDesc();
-                qDebug() << "  记录数:" << info.recordCount;
-
-                for (int j = 0; j < info.records.size(); ++j) {
-                    const auto& record = info.records[j];
-                    qDebug() << "  行为记录[" << j << "]: "
-                             << record.behaviorTypeDesc() << " + "
-                             << record.toolTypeDesc();
+                matchedIdCards.insert(info.idCard);
+                idCardCount[info.idCard]++;
+                
+                size_t hash = CryptoWrapper::hashIdCard(info.idCard);
+                matchedHashes[hash] = info.idCard;
+                
+                // 打印前10条详细信息
+                if (i < 10) {
+                    qDebug() << QString("匹配[%1]: %2, 哈希: %3 (0x%4), 评级: %5, 记录数: %6")
+                                    .arg(i, 4)
+                                    .arg(info.idCard)
+                                    .arg(hash)
+                                    .arg(hash, 0, 16)
+                                    .arg(info.riskLevelDesc())
+                                    .arg(info.recordCount);
                 }
             }
-
-            qDebug() << "========================================";
+            
+            if (matchedInfoList.size() > 20) {
+                qDebug() << "... 中间省略 ...";
+                qDebug() << "最后10条：";
+                for (int i = qMax(0, matchedInfoList.size() - 10); i < matchedInfoList.size(); ++i) {
+                    const auto& info = matchedInfoList[i];
+                    size_t hash = CryptoWrapper::hashIdCard(info.idCard);
+                    qDebug() << QString("匹配[%1]: %2, 哈希: %3 (0x%4), 评级: %5, 记录数: %6")
+                                    .arg(i, 4)
+                                    .arg(info.idCard)
+                                    .arg(hash)
+                                    .arg(hash, 0, 16)
+                                    .arg(info.riskLevelDesc())
+                                    .arg(info.recordCount);
+                }
+            }
+            
+            qDebug() << "";
+            qDebug() << "总匹配记录数：" << matchedInfoList.size();
+            qDebug() << "唯一身份证数量：" << matchedIdCards.size();
+            qDebug() << "唯一哈希值数量：" << matchedHashes.size();
+            qDebug() << "==========================================";
+            qDebug() << "";
+            
+            // 🆕 检查是否有重复的身份证号
+            if (matchedIdCards.size() != matchedInfoList.size()) {
+                int duplicateCount = matchedInfoList.size() - matchedIdCards.size();
+                qWarning() << "========== ⚠️ 匹配结果中有重复 ==========";
+                qWarning() << "重复记录数量：" << duplicateCount;
+                
+                qDebug() << "重复的身份证号：";
+                int dupIndex = 0;
+                for (auto it = idCardCount.begin(); it != idCardCount.end(); ++it) {
+                    if (it.value() > 1) {
+                        dupIndex++;
+                        size_t hash = CryptoWrapper::hashIdCard(it.key());
+                        qWarning() << QString("  重复#%1: %2 出现 %3 次, 哈希: %4 (0x%5)")
+                                          .arg(dupIndex)
+                                          .arg(it.key())
+                                          .arg(it.value())
+                                          .arg(hash)
+                                          .arg(hash, 0, 16);
+                    }
+                }
+                qWarning() << "==========================================";
+                qWarning() << "";
+            }
+            
+            // 🆕 对比发送的库内数据和匹配结果
+            qDebug() << "========== 🔍 库内数据对比分析 ==========";
+            qDebug() << "发送的库内身份证数量：" << m_insideIdCards.size();
+            qDebug() << "发送的库内唯一哈希数量：" << m_insideIdCardHashes.size();
+            qDebug() << "匹配返回的唯一身份证数量：" << matchedIdCards.size();
+            qDebug() << "匹配返回的唯一哈希数量：" << matchedHashes.size();
+            
+            int diff = matchedIdCards.size() - m_insideIdCards.size();
+            qDebug() << "数量差异：" << diff;
+            qDebug() << "";
+            
+            if (diff > 0) {
+                qWarning() << "⚠️ 匹配结果比发送的库内数据多" << diff << "条！";
+                qWarning() << "";
+                qWarning() << "多出来的身份证号：";
+                
+                int extraIndex = 0;
+                for (const QString& idCard : matchedIdCards) {
+                    if (!m_insideIdCards.contains(idCard)) {
+                        extraIndex++;
+                        size_t hash = CryptoWrapper::hashIdCard(idCard);
+                        qWarning() << QString("  额外#%1: %2").arg(extraIndex).arg(idCard);
+                        qWarning() << QString("         哈希: %1 (0x%2)").arg(hash).arg(hash, 0, 16);
+                        
+                        // 检查是否有相同哈希值的库内身份证号
+                        if (m_insideIdCardHashes.contains(hash)) {
+                            QString originalIdCard = m_insideIdCardHashes[hash];
+                            qWarning() << QString("         ⚠️ 与库内身份证号 %1 哈希冲突！").arg(originalIdCard);
+                        } else {
+                            qWarning() << "         (在库内哈希表中未找到此哈希值)";
+                        }
+                        qWarning() << "";
+                    }
+                }
+                
+                // 检查是否有库内数据在匹配结果中缺失
+                qDebug() << "检查是否有库内数据未匹配：";
+                int missingIndex = 0;
+                for (const QString& idCard : m_insideIdCards) {
+                    if (!matchedIdCards.contains(idCard)) {
+                        missingIndex++;
+                        size_t hash = CryptoWrapper::hashIdCard(idCard);
+                        qWarning() << QString("  缺失#%1: %2").arg(missingIndex).arg(idCard);
+                        qWarning() << QString("         哈希: %1 (0x%2)").arg(hash).arg(hash, 0, 16);
+                        qWarning() << "";
+                    }
+                }
+                if (missingIndex == 0) {
+                    qDebug() << "  ✓ 所有库内数据都在匹配结果中";
+                }
+                
+            } else if (diff < 0) {
+                qWarning() << "⚠️ 匹配结果比发送的库内数据少" << (-diff) << "条！";
+                qWarning() << "";
+                qWarning() << "漏掉的库内身份证号：";
+                
+                int missingIndex = 0;
+                for (const QString& idCard : m_insideIdCards) {
+                    if (!matchedIdCards.contains(idCard)) {
+                        missingIndex++;
+                        size_t hash = CryptoWrapper::hashIdCard(idCard);
+                        qWarning() << QString("  缺失#%1: %2").arg(missingIndex).arg(idCard);
+                        qWarning() << QString("         哈希: %1 (0x%2)").arg(hash).arg(hash, 0, 16);
+                        qWarning() << "";
+                    }
+                }
+            } else {
+                qDebug() << "✓ 数量一致";
+                
+                // 即使数量一致，也检查是否有不同的身份证号
+                bool allMatch = true;
+                for (const QString& idCard : matchedIdCards) {
+                    if (!m_insideIdCards.contains(idCard)) {
+                        allMatch = false;
+                        break;
+                    }
+                }
+                
+                if (!allMatch) {
+                    qWarning() << "⚠️ 但是身份证号不完全一致！";
+                    qWarning() << "差异详情：";
+                    
+                    // 找出在匹配结果中但不在库内的
+                    for (const QString& idCard : matchedIdCards) {
+                        if (!m_insideIdCards.contains(idCard)) {
+                            size_t hash = CryptoWrapper::hashIdCard(idCard);
+                            qWarning() << QString("  匹配结果中多余: %1, 哈希: %2").arg(idCard).arg(hash);
+                        }
+                    }
+                    
+                    // 找出在库内但不在匹配结果中的
+                    for (const QString& idCard : m_insideIdCards) {
+                        if (!matchedIdCards.contains(idCard)) {
+                            size_t hash = CryptoWrapper::hashIdCard(idCard);
+                            qWarning() << QString("  库内数据缺失: %1, 哈希: %2").arg(idCard).arg(hash);
+                        }
+                    }
+                } else {
+                    qDebug() << "✓ 身份证号完全匹配";
+                }
+            }
+            
+            qDebug() << "==========================================";
+            qDebug() << "";
 
             // 计算耗时
             QDateTime endTime = QDateTime::currentDateTime();
@@ -266,7 +480,7 @@ void TestSetStore::queryBlacklist()
             setQueryResult(matchCount, totalCount, elapsedTime);
 
             // 可以将完整信息存储起来，供导出功能使用
-            m_matchedInfoList = matchedInfoList;  // 需要在类中添加这个成员变量
+            m_matchedInfoList = matchedInfoList;
 
             emit querySuccess();
         },
@@ -274,37 +488,8 @@ void TestSetStore::queryBlacklist()
             setQueryStatus(QueryFailed);
             emit queryFailed("查询失败: " + error);
         }
-        );
+    );
 }
-
-// void TestSetStore::exportResults()
-// {
-//     ApiService::instance().exportResults(
-//         [this](const QByteArray& fileData, const QString& filename) {
-//             // 获取下载目录
-//             QString downloadPath = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
-//             if (downloadPath.isEmpty()) {
-//                 downloadPath = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
-//             }
-            
-//             QString fullPath = downloadPath + "/" + filename;
-            
-//             // 保存文件
-//             QFile file(fullPath);
-//             if (file.open(QIODevice::WriteOnly)) {
-//                 file.write(fileData);
-//                 file.close();
-//                 emit exportSuccess(fullPath);
-//             } else {
-//                 emit exportFailed("无法保存文件到: " + fullPath);
-//             }
-//         },
-//         [this](const QString& error) {
-//             emit exportFailed(error);
-//         }
-//     );
-// }
-
 
 void TestSetStore::exportResults()
 {
@@ -327,7 +512,7 @@ void TestSetStore::exportResults()
         // 生成文件名
         QString timestamp = QDateTime::currentDateTime().toString("yyyyMMddHHmmss");
         QString fileName = QString("测试集查询结果_%1.xlsx").arg(timestamp);
-QString documentsPath = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+        QString documentsPath = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
         QString filePath = documentsPath + "/" + fileName;
 
         qDebug() << "导出路径：" << filePath;
@@ -447,7 +632,7 @@ QString documentsPath = QStandardPaths::writableLocation(QStandardPaths::Documen
 
                 currentRow += qMax(recordCount, 1);
 
-            }else {
+            } else {
                 // 库外数据或库内但未匹配的数据
                 xlsx.write(currentRow, 1, sequenceNum, centerFormat);
                 xlsx.write(currentRow, 2, idCard, dataFormat);
@@ -477,6 +662,7 @@ QString documentsPath = QStandardPaths::writableLocation(QStandardPaths::Documen
         emit exportFailed("导出失败: 未知错误");
     }
 }
+
 void TestSetStore::reset()
 {
     setTestSetStatus(NotCreated);

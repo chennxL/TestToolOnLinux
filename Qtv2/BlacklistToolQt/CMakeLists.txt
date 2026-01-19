@@ -42,6 +42,7 @@ set(PROJECT_SOURCES
 
     # Crypto
     crypto/cryptowrapper.cpp
+    crypto/id_compress.cc
 
     # Widgets
     widgets/createblacklistwidget.cpp
@@ -64,6 +65,7 @@ set(PROJECT_HEADERS
     include/encryptiontestwidget.h
     include/messagehelper.h
     include/cryptowrapper.h
+    include/id_compress.hpp
 )
 
 # 创建可执行文件

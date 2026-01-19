@@ -4,6 +4,7 @@ import com.blacklist.config.GrpcConfig;
 import com.blacklist.dto.BlacklistFullInfo;
 import com.blacklist.util.BlacklistBitEncoder;
 import com.blacklist.util.IdCardHashUtil;
+import com.blacklist.util.IdCompress;  // ⭐ 修改：替换导入
 import com.google.protobuf.ByteString;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
@@ -21,6 +22,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+
 
 @Slf4j
 @Component
@@ -82,9 +84,7 @@ public class PSIGrpcClient {
             Map<Long, Psi.LabelsType> srvData = convertBlacklistToSrvData(blacklistData);
 
             log.info("srv_data大小: {}", srvData.size());
-
-            // 🔥 3. 验证srv_data内容（发送前检查）
-            log.info("========== 发送前验证 ==========");
+            //3.验证srv_data内容（发送前检查）
             int verifyCount = 0;
             for (Map.Entry<Long, Psi.LabelsType> entry : srvData.entrySet()) {
                 if (verifyCount >= 3) break;
@@ -148,9 +148,9 @@ public class PSIGrpcClient {
 
             log.info("调用C++服务器...");
 
-            // 6. 调用gRPC（设置3分钟超时）
+            // 6. 调用gRPC（设置10分钟超时）
             Psi.EncryptResponse response = blockingStub
-                    .withDeadlineAfter(3, TimeUnit.MINUTES)
+                    .withDeadlineAfter(10, TimeUnit.MINUTES)
                     .doMatch(request);
 
             // 7. 返回Base64编码的结果
@@ -184,51 +184,62 @@ public class PSIGrpcClient {
      * value = LabelsType { labels: [编码后的完整信息] }
      */
     /**
-     * 将黑名单完整信息转换为srv_data格式（多labels方案）
+     * 将黑名单完整信息转换为srv_data格式（使用压缩编码）
+     *
+     * Map结构：
+     * key = 身份证号压缩后的整数（可逆编码，零碰撞）
+     * value = LabelsType { labels: [编码后的完整信息] }
      */
     private Map<Long, Psi.LabelsType> convertBlacklistToSrvData(List<BlacklistFullInfo> blacklistData) {
         Map<Long, Psi.LabelsType> srvData = new HashMap<>();
 
-        log.info("---------- srv_data 转换详情 ----------");
+        log.info("---------- srv_data 转换详情（使用压缩编码）----------");
 
         for (int i = 0; i < blacklistData.size(); i++) {
             BlacklistFullInfo info = blacklistData.get(i);
 
-            // 计算身份证哈希值作为key
-            long idCardHash = IdCardHashUtil.hashIdCard(info.getMain().getIdCard());
+            try {
+                // ⭐ 关键修改：使用压缩编码替代哈希
+                long compressedId = IdCompress.compress(info.getMain().getIdCard());
 
-            // 编码为labels数组
-            long[] labels = BlacklistBitEncoder.encodeBlacklistInfoToLabels(info);
+                // 编码为labels数组
+                long[] labels = BlacklistBitEncoder.encodeBlacklistInfoToLabels(info);
 
-            // 构建LabelsType
-            Psi.LabelsType.Builder labelsBuilder = Psi.LabelsType.newBuilder();
-            for (long label : labels) {
-                labelsBuilder.addLabels(label);
-            }
-            Psi.LabelsType labelsType = labelsBuilder.build();
-
-            srvData.put(idCardHash, labelsType);
-
-            // 打印前3条的详细信息
-            if (i < 3) {
-                log.info("  [{}] 身份证={}, hash={}",
-                        i, info.getMain().getIdCard(), idCardHash);
-                log.info("       labels数量: {}", labels.length);
-                log.info("       labels[0]: {} (评级={}, 记录数={})",
-                        labels[0],
-                        info.getMain().getRiskLevel().getDescription(),
-                        info.getMain().getRecordCount());
-
-                for (int j = 0; j < info.getRecords().size(); j++) {
-                    var rec = info.getRecords().get(j);
-                    log.info("       labels[{}]: {} ({}(code={}) + {}(code={}))",
-                            j + 1,
-                            labels[j + 1],
-                            rec.getBehaviorType().getDescription(),
-                            rec.getBehaviorType().getCode(),
-                            rec.getTool().getDescription(),
-                            rec.getTool().getCode());
+                // 构建LabelsType
+                Psi.LabelsType.Builder labelsBuilder = Psi.LabelsType.newBuilder();
+                for (long label : labels) {
+                    labelsBuilder.addLabels(label);
                 }
+                Psi.LabelsType labelsType = labelsBuilder.build();
+
+                srvData.put(compressedId, labelsType);
+
+                // 打印前3条的详细信息
+                if (i < 3) {
+                    log.info("  [{}] 身份证={}, compressed={}",
+                            i, info.getMain().getIdCard(), compressedId);
+                    log.info("       可逆验证: {}", 
+                            IdCompress.decompress(compressedId).equals(info.getMain().getIdCard()) ? "✓" : "✗");
+                    log.info("       labels数量: {}", labels.length);
+                    log.info("       labels[0]: {} (评级={}, 记录数={})",
+                            labels[0],
+                            info.getMain().getRiskLevel().getDescription(),
+                            info.getMain().getRecordCount());
+
+                    for (int j = 0; j < info.getRecords().size(); j++) {
+                        var rec = info.getRecords().get(j);
+                        log.info("       labels[{}]: {} ({}(code={}) + {}(code={}))",
+                                j + 1,
+                                labels[j + 1],
+                                rec.getBehaviorType().getDescription(),
+                                rec.getBehaviorType().getCode(),
+                                rec.getTool().getDescription(),
+                                rec.getTool().getCode());
+                    }
+                }
+            } catch (Exception e) {
+                log.error("处理身份证号失败: {}", info.getMain().getIdCard(), e);
+                // 跳过这条数据，继续处理其他
             }
         }
 
@@ -237,6 +248,4 @@ public class PSIGrpcClient {
 
         return srvData;
     }
-
-
 }

@@ -24,8 +24,8 @@ void ApiService::createBlacklist(int size,
 {
     QJsonObject data;
     data["size"] = size;
-    // 查询操作可能耗时较长，设置10分钟超时
-    NetworkRequest::instance().post("/blacklist/create", data, onSuccess, onError, 600000);
+    // 查询操作可能耗时较长，设置20分钟超时
+    NetworkRequest::instance().post("/blacklist/create", data, onSuccess, onError, 1200000);
 }
 
 void ApiService::getBlacklistStatus(std::function<void(const QJsonObject&)> onSuccess,

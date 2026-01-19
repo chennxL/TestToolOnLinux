@@ -17,6 +17,8 @@ import org.apache.poi.ss.usermodel.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -171,45 +173,68 @@ public class TestSetServiceImpl implements TestSetService {
     /**
      * 查询所有黑名单完整信息（包含行为记录）
      */
-    private List<BlacklistFullInfo> queryAllBlacklistWithRecords() {
-        log.info("开始查询黑名单完整数据（主表+行为记录）");
+    /**
+ * 查询所有黑名单完整信息（包含行为记录）
+ * 修改：使用分页查询避免一次性加载大量数据导致OOM
+ */
+private List<BlacklistFullInfo> queryAllBlacklistWithRecords() {
+    log.info("开始查询黑名单完整数据（主表+行为记录）");
 
-        // 1. 查询所有黑名单主表
-        List<BlacklistMain> mainList = blacklistMainMapper.selectList(null);
-        log.info("查询到黑名单主表数据: {} 条", mainList.size());
-
+    List<BlacklistFullInfo> result = new ArrayList<>();
+    int pageSize = 1000; // 每次查询1000条
+    int currentPage = 1;
+    
+    while (true) {
+        log.info("查询第 {} 页黑名单数据...", currentPage);
+        
+        // 【修改1】使用分页查询主表，避免一次性加载所有数据
+        Page<BlacklistMain> page = new Page<>(currentPage, pageSize);
+        IPage<BlacklistMain> pageResult = blacklistMainMapper.selectPage(page, null);
+        List<BlacklistMain> mainList = pageResult.getRecords();
+        
         if (mainList.isEmpty()) {
-            return new ArrayList<>();
+            break;
         }
-
-        // 2. 提取所有 userId
+        
+   //     log.info("第 {} 页查询到 {} 条主表数据", currentPage, mainList.size());
+        
+        // 2. 提取这一批的 userId
         List<Long> userIds = mainList.stream()
                 .map(BlacklistMain::getUserId)
                 .collect(Collectors.toList());
-
-        // 3. 批量查询所有行为记录
-        List<BehaviorRecord> allRecords = behaviorRecordMapper.selectList(
+        
+        // 3. 批量查询这一批的行为记录
+        List<BehaviorRecord> records = behaviorRecordMapper.selectList(
                 new LambdaQueryWrapper<BehaviorRecord>()
                         .in(BehaviorRecord::getUserId, userIds)
         );
-        log.info("查询到行为记录数据: {} 条", allRecords.size());
-
+        
         // 4. 按 userId 分组行为记录
-        Map<Long, List<BehaviorRecord>> recordMap = allRecords.stream()
+        Map<Long, List<BehaviorRecord>> recordMap = records.stream()
                 .collect(Collectors.groupingBy(BehaviorRecord::getUserId));
-
-        // 5. 组装完整信息
-        List<BlacklistFullInfo> result = new ArrayList<>();
+        
+        // 5. 组装这一批的完整信息
         for (BlacklistMain main : mainList) {
             BlacklistFullInfo info = new BlacklistFullInfo();
             info.setMain(main);
             info.setRecords(recordMap.getOrDefault(main.getUserId(), new ArrayList<>()));
             result.add(info);
         }
-
-        log.info("组装完成，共 {} 条完整黑名单信息", result.size());
-        return result;
+        
+        log.info("第 {} 页数据处理完成，当前累计: {} 条", currentPage, result.size());
+        
+        // 【修改2】判断是否还有下一页
+        if (currentPage >= pageResult.getPages()) {
+            log.info("已查询完所有页，总页数: {}", pageResult.getPages());
+            break;
+        }
+        
+        currentPage++;
     }
+    
+    log.info("分页查询完成，共 {} 条完整黑名单信息", result.size());
+    return result;
+}
 
     /**
      * 解析匹配数量（暂时返回0，后续根据C++返回格式实现）

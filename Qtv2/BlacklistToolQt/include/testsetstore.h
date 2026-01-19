@@ -105,5 +105,6 @@ private:
     // 🔥 新增：保存原始测试集数据
     QStringList m_originalTestSet;       // 原始测试集（所有身份证号）
     QSet<QString> m_insideIdCards;       // 库内身份证号集合（用于判断）
+    QMap<size_t, QString> m_insideIdCardHashes;  // 库内身份证号的哈希映射
 };
 #endif // TESTSETSTORE_H

@@ -8,7 +8,7 @@ docker compose up -d
 cd /home/test/TestTool/JavaSource/blacklist-backend
 ./run.sh &
 
-sleep 5
+sleep 10
 
 # 3. 启动 Qt
 cd /home/test/TestTool/Qtv2/BlacklistToolQt/build

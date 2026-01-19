@@ -1,5 +1,6 @@
 #include "cryptowrapper.h"
 #include "blacklistbitdecoder.h"
+#include "id_compress.hpp"  // ⭐ 引入压缩编码
 #include <QDebug>
 #include <QCryptographicHash>
 #include <vector>
@@ -33,22 +34,22 @@ CryptoWrapper::~CryptoWrapper()
         m_context = nullptr;
     }
 }
-
+/**
+ * 使用SHA-256哈希身份证号，取前8字节
+ * 必须与Java端的 IdCardHashUtil.hashIdCard() 完全一致
+ */
 size_t CryptoWrapper::hashIdCard(const QString& idCard)
 {
-    // 将身份证号转换为size_t类型的key
-    // 使用SHA256哈希，取前8字节
-    QByteArray hash = QCryptographicHash::hash(
-        idCard.toUtf8(),
-        QCryptographicHash::Sha256
-        );
-
-    // 取前8字节作为size_t
-    size_t result = 0;
-    for (int i = 0; i < 8 && i < hash.size(); ++i) {
-        result = (result << 8) | static_cast<unsigned char>(hash[i]);
+    // QString 转 std::string
+    std::string idCardStd = idCard.toStdString();
+    
+    try {
+        // 使用压缩编码（零碰撞）
+        return static_cast<size_t>(id::compress(idCardStd));
+    } catch (const std::exception& e) {
+        qWarning() << "压缩身份证号失败:" << idCard << "错误:" << e.what();
+        return 0;  // 失败返回0
     }
-    return result;
 }
 
 bool CryptoWrapper::encryptIdCards(const QStringList& idCards,
