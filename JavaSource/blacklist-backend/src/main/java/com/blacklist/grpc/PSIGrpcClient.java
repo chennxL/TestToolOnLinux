@@ -150,7 +150,7 @@ public class PSIGrpcClient {
 
             // 6. 调用gRPC（设置10分钟超时）
             Psi.EncryptResponse response = blockingStub
-                    .withDeadlineAfter(10, TimeUnit.MINUTES)
+                    .withDeadlineAfter(15, TimeUnit.MINUTES)
                     .doMatch(request);
 
             // 7. 返回Base64编码的结果

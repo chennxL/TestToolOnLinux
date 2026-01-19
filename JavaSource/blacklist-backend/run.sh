@@ -2,13 +2,11 @@
 echo "=========================================="
 echo "  启动Java后端"
 echo "=========================================="
-
 # 检查jar包是否存在
 if [ ! -f target/blacklist-test-tool-1.0.0.jar ]; then
     echo "错误: jar包不存在，请先运行 ./build.sh 编译项目"
     exit 1
 fi
-
 # 停止旧进程
 if [ -f app.pid ]; then
     OLD_PID=$(cat app.pid)
@@ -18,12 +16,11 @@ if [ -f app.pid ]; then
         sleep 2
     fi
 fi
-
 # 启动新进程
 echo "启动Java后端..."
-nohup java -jar target/blacklist-test-tool-1.0.0.jar \
+nohup java -Xms6g -Xmx8g -XX:+UseG1GC -XX:MaxGCPauseMillis=200 \
+    -jar target/blacklist-test-tool-1.0.0.jar \
     --spring.profiles.active=prod > application.log 2>&1 &
-
 echo $! > app.pid
 echo "✓ Java后端已启动 (PID: $(cat app.pid))"
 echo ""
