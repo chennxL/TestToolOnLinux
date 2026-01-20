@@ -20,6 +20,11 @@ import org.springframework.transaction.annotation.Transactional;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -97,6 +102,15 @@ public class TestSetServiceImpl implements TestSetService {
 
             log.info("测试集明文数据生成完成，总数: {}", idCardList.size());
 
+            // 导出测试集到文件
+            try {
+                String exportPath = exportTestSetToFile(idCardList, insideSize, outsideSize);
+                log.info("测试集已导出到: {}", exportPath);
+            } catch (IOException e) {
+                log.error("测试集导出失败", e);
+                // 导出失败不影响返回结果
+            }
+
             return idCardList;
         } catch (BusinessException e) {
             throw e;
@@ -104,6 +118,39 @@ public class TestSetServiceImpl implements TestSetService {
             log.error("测试集生成失败", e);
             throw new BusinessException("测试集生成失败: " + e.getMessage());
         }
+    }
+
+    /**
+     * 导出测试集到文件（仅身份证号）
+     */
+    private String exportTestSetToFile(List<String> idCardList, int insideSize, int outsideSize) throws IOException {
+        // 导出目录
+        String exportDir = "./testset_exports";
+        File dir = new File(exportDir);
+        if (!dir.exists()) {
+            dir.mkdirs();
+        }
+
+        // 生成文件名：testset_库内数量_库外数量_时间戳.txt
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMdd_HHmmss");
+        String timestamp = sdf.format(new Date());
+        String fileName = String.format("testset_%d_inside_%d_outside_%s.txt", 
+                                       insideSize, outsideSize, timestamp);
+        File exportFile = new File(dir, fileName);
+
+        log.info("开始导出测试集到: {}", exportFile.getAbsolutePath());
+
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(exportFile))) {
+            // 写入每个身份证号，每行一个
+            for (String idCard : idCardList) {
+                writer.write(idCard);
+                writer.newLine();
+            }
+            writer.flush();
+        }
+
+        log.info("测试集导出成功，共 {} 条身份证号", idCardList.size());
+        return exportFile.getAbsolutePath();
     }
 
     @Override
