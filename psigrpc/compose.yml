@@ -2,5 +2,7 @@ services:
   psigrpc:
     image: psigrpc
     restart: unless-stopped
+    environment:
+      GRPC_MAX_RECEIVE_SIZE: 631242752
     ports:
       - "50051:50051"

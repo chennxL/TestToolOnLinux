@@ -15,7 +15,7 @@ CryptoWrapper::CryptoWrapper(QObject *parent)
     , m_context(nullptr)
     , m_revealTable(nullptr)
     , m_weight(15)              // 初始化为15，与PSI_Client_Context_Create的第1个参数一致
-    , m_effectiveLambda(16)     // 初始化为16，与PSI_Client_Context_Create的第2个参数一致
+    , m_effectiveLambda(40)     // 初始化为16，与PSI_Client_Context_Create的第2个参数一致
     , m_logPolyMod(14)          // 初始化为14，与PSI_Client_Context_Create的第3个参数一致
 {
 }
@@ -90,7 +90,7 @@ bool CryptoWrapper::encryptIdCards(const QStringList& idCards,
         }
 
         // 3. 创建客户端上下文（参数：15, 16, 14）
-        m_context = PSI_Client_Context_Create(15, 16, 14);
+        m_context = PSI_Client_Context_Create(15, 40, 14);
         if (!m_context) {
             qWarning() << "创建客户端上下文失败";
             return false;
