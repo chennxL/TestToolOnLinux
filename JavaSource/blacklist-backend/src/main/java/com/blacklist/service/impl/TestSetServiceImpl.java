@@ -92,26 +92,96 @@ public class TestSetServiceImpl implements TestSetService {
                 log.info("库内数据生成完成: {} 条", insideSize);
             }
 
-            // 生成库外数据（随机生成新身份证号）
-            if (outsideSize > 0) {
-                Set<String> outsideIdCards = IdCardGenerator.generateOutsideIdCards(outsideSize);
-                idCardList.addAll(outsideIdCards);
-
-                log.info("库外数据生成完成: {} 条", outsideSize);
+            // 2. 生成库外数据（确保前17位不与黑名单碰撞）
+        if (outsideSize > 0) {
+            log.info("开始生成库外数据，需避免前17位与黑名单碰撞...");
+            
+            // 2.1 获取黑名单所有前17位（用于碰撞检测）
+            Set<String> blacklistPrefix17 = new HashSet<>();
+            
+            // 分批查询避免内存溢出
+            long batchSize = 10000;
+            long totalBatches = (blacklistCount + batchSize - 1) / batchSize;
+            
+            for (long i = 0; i < totalBatches; i++) {
+                QueryWrapper<BlacklistMain> batchWrapper = new QueryWrapper<>();
+                batchWrapper.select("id_card")
+                           .last("LIMIT " + (i * batchSize) + ", " + batchSize);
+                List<BlacklistMain> batch = blacklistMainMapper.selectList(batchWrapper);
+                
+                for (BlacklistMain main : batch) {
+                    blacklistPrefix17.add(main.getIdCard().substring(0, 17));
+                }
+                
+                if ((i + 1) % 10 == 0 || i == totalBatches - 1) {
+                    log.info("黑名单前17位加载进度: {}/{} 批次", i + 1, totalBatches);
+                }
             }
-
-            log.info("测试集明文数据生成完成，总数: {}", idCardList.size());
-
-            // 导出测试集到文件
-            try {
-                String exportPath = exportTestSetToFile(idCardList, insideSize, outsideSize);
-                log.info("测试集已导出到: {}", exportPath);
-            } catch (IOException e) {
-                log.error("测试集导出失败", e);
-                // 导出失败不影响返回结果
+            
+            log.info("黑名单前17位唯一数量: {} (总记录: {})", 
+                    blacklistPrefix17.size(), blacklistCount);
+            
+            // 2.2 生成库外数据，跳过前17位碰撞
+            Set<String> outsideIdCards = new HashSet<>();
+            int attempts = 0;
+            int maxAttempts = outsideSize * 1000; // 最大尝试次数
+            int skippedCollisions = 0; // 跳过的碰撞数
+            int skippedDuplicates = 0; // 跳过的自身重复数
+            
+            while (outsideIdCards.size() < outsideSize && attempts < maxAttempts) {
+                String newId = IdCardGenerator.generateOutsideIdCard();
+                String prefix17 = newId.substring(0, 17);
+                
+                attempts++;
+                
+                // 检查1：前17位不能在黑名单中
+                if (blacklistPrefix17.contains(prefix17)) {
+                    skippedCollisions++;
+                    continue;
+                }
+                
+                // 检查2：库外数据内部不重复
+                if (!outsideIdCards.add(newId)) {
+                    skippedDuplicates++;
+                    continue;
+                }
+                
+                // 进度提示
+                if (outsideIdCards.size() % 1000 == 0) {
+                    log.info("库外数据生成进度: {}/{} (已尝试: {}, 跳过碰撞: {}, 跳过重复: {})", 
+                            outsideIdCards.size(), outsideSize, attempts, 
+                            skippedCollisions, skippedDuplicates);
+                }
             }
-
-            return idCardList;
+            
+            // 检查是否生成成功
+            if (outsideIdCards.size() < outsideSize) {
+                log.error("库外数据生成不足！目标: {}, 实际: {}, 尝试次数: {}", 
+                        outsideSize, outsideIdCards.size(), attempts);
+                log.error("跳过碰撞: {}, 跳过重复: {}", skippedCollisions, skippedDuplicates);
+                throw new BusinessException(500, 
+                        String.format("库外数据生成失败：仅生成 %d/%d 条，黑名单规模过大导致碰撞率过高", 
+                                outsideIdCards.size(), outsideSize));
+            }
+            
+            idCardList.addAll(outsideIdCards);
+            log.info("库外数据生成完成: {} 条（跳过 {} 个前17位碰撞，{} 个自身重复）", 
+                    outsideIdCards.size(), skippedCollisions, skippedDuplicates);
+        }
+        
+        log.info("测试集明文数据生成完成，总数: {}", idCardList.size());
+        
+        // 导出测试集到文件
+        try {
+            String exportPath = exportTestSetToFile(idCardList, insideSize, outsideSize);
+            log.info("测试集已导出到: {}", exportPath);
+        } catch (IOException e) {
+            log.error("测试集导出失败", e);
+            // 导出失败不影响返回结果
+        }
+        
+        return idCardList;
+        
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
