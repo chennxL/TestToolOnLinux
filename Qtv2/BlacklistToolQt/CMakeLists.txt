@@ -3,10 +3,12 @@ project(BlacklistTool VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
+
+# ========== 添加编译器编码参数（解决中文乱码）==========
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -finput-charset=UTF-8 -fexec-charset=UTF-8")
 
 # 查找Qt6组件
 find_package(Qt6 REQUIRED COMPONENTS Core Widgets Network)
@@ -31,24 +33,19 @@ set(PROJECT_SOURCES
     # Main
     src/main.cpp
     src/mainwindow.cpp
-
     # Network
     network/networkrequest.cpp
     network/apiservice.cpp
-
     # Stores
     stores/blackliststore.cpp
     stores/testsetstore.cpp
-
     # Crypto
     crypto/cryptowrapper.cpp
     crypto/id_compress.cc
-
     # Widgets
     widgets/createblacklistwidget.cpp
     widgets/createtestsetwidget.cpp
     widgets/encryptiontestwidget.cpp
-
     # Utils
     utils/messagehelper.cpp
 )
@@ -86,7 +83,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     ${PSIWRAPPER_LIB_DIR}/libpsiwrapper.so
     ${PSIWRAPPER_LIB_DIR}/libpsi.so
     pthread
-    QXlsx::QXlsx  # 添加这一行
+    QXlsx::QXlsx
 )
 
 # 设置运行时库路径

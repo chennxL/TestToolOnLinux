@@ -73,7 +73,7 @@ bool CryptoWrapper::encryptIdCards(const QStringList& idCards,
             // 保存映射关系：哈希值 → 身份证号
             m_hashToIdCardMap[key] = idCard;
 
-            qDebug() << "身份证号:" << idCard << "-> 哈希值:" << key;
+            //qDebug() << "身份证号:" << idCard << "-> 哈希值:" << key;
         }
 
         qDebug() << "数据准备完成，实际数据量：" << cli_data.size();
@@ -208,16 +208,16 @@ bool CryptoWrapper::decryptResultWithDetails(const QString& encryptedResult,
             size_t value_count = results[i].count;
             size_t* values = results[i].value;
 
-            qDebug() << "结果[" << i << "]:";
-            qDebug() << "  key(身份证哈希):" << key;
-            qDebug() << "  labels数量:" << value_count;
+           // qDebug() << "结果[" << i << "]:";
+           // qDebug() << "  key(身份证哈希):" << key;
+           // qDebug() << "  labels数量:" << value_count;
 
             // 打印所有labels
-            qDebug() << "  所有labels:";
-            for (size_t j = 0; j < value_count; ++j) {
-                qDebug() << "    labels[" << j << "]:" << values[j]
-                         << "(0x" << QString::number(values[j], 16) << ")";
-            }
+          //  qDebug() << "  所有labels:";
+           // for (size_t j = 0; j < value_count; ++j) {
+          //      qDebug() << "    labels[" << j << "]:" << values[j]
+           //              << "(0x" << QString::number(values[j], 16) << ")";
+           // }
 
             // 通过映射表找回原始身份证号
             if (!m_hashToIdCardMap.contains(key)) {
@@ -226,7 +226,7 @@ bool CryptoWrapper::decryptResultWithDetails(const QString& encryptedResult,
             }
 
             QString idCard = m_hashToIdCardMap[key];
-            qDebug() << "  身份证号:" << idCard;
+         //   qDebug() << "  身份证号:" << idCard;
 
             // 检查labels数组是否有数据
             if (value_count == 0 || !values) {

@@ -391,15 +391,16 @@ void CreateTestSetWidget::updateButtonStates()
     bool testsetCreated = (TestSetStore::instance().testSetStatus() == TestSetStore::Created);
     bool queryCompleted = (TestSetStore::instance().queryStatus() == TestSetStore::QueryCompleted);
     bool isQuerying = (TestSetStore::instance().queryStatus() == TestSetStore::Querying);
+    bool isCreating = (TestSetStore::instance().testSetStatus() == TestSetStore::Creating);
     
     // 创建按钮：黑名单已创建
-    m_createButton->setEnabled(blacklistCreated);
+    m_createButton->setEnabled(blacklistCreated && !isCreating && !isQuerying);
     
     // 导出按钮：查询已完成
     m_exportButton->setEnabled(queryCompleted);
     
     // 查询按钮：黑名单和测试集都已创建，且未在查询中
-    m_queryButton->setEnabled(blacklistCreated && testsetCreated && !isQuerying);
+    m_queryButton->setEnabled(blacklistCreated && testsetCreated && !isQuerying && !isCreating);
 }
 
 void CreateTestSetWidget::onCreateClicked()
@@ -441,6 +442,8 @@ void CreateTestSetWidget::onQueryClicked()
         return;
     }
     
+    m_queryButton->setEnabled(false);
+    m_createButton->setEnabled(false);
     TestSetStore::instance().queryBlacklist();
 }
 
@@ -459,6 +462,11 @@ void CreateTestSetWidget::onTestSetStatusChanged(TestSetStore::TestSetStatus sta
         "border-bottom: none;"
     ).arg(color));
     
+    if(status == TestSetStore::Creating){
+      m_createButton->setText("创建中...");
+    }else{
+      m_createButton->setText("创建");
+      }
     updateButtonStates();
 }
 

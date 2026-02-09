@@ -11,7 +11,7 @@ MainWindow::MainWindow(QWidget *parent)
     setupUi();
     
     // 设置窗口属性
-    setWindowTitle("黑名单查询测试工具");
+    setWindowTitle(QStringLiteral("黑名单查询测试工具"));
     resize(1400, 900);
     
     // 居中显示 - 使用QApplication::primaryScreen()更兼容
@@ -61,7 +61,7 @@ void MainWindow::setupUi()
     headerLayout->addSpacing(16);
     
     // 标题
-    QLabel* title = new QLabel("黑名单查询测试工具");
+    QLabel* title = new QLabel(QStringLiteral("黑名单查询测试工具"));
     title->setStyleSheet(
         "font-size: 28px;"
         "color: white;"

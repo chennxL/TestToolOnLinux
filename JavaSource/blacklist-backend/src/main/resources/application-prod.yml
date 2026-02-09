@@ -13,8 +13,8 @@ spring:
     username: root
     password: 123456
     hikari:
-      minimum-idle: 5
-      maximum-pool-size: 20
+      minimum-idle: 3
+      maximum-pool-size: 10
       connection-timeout: 30000
       idle-timeout: 600000
       max-lifetime: 1800000
@@ -28,6 +28,8 @@ spring:
 mybatis-plus:
   configuration:
     # 配置枚举类型处理器
+    cache-enabled: false                  # 禁用二级缓存
+    local-cache-scope: STATEMENT        # 一级缓存改为语句级别（每条SQL执行后立即清空）
     default-enum-type-handler: org.apache.ibatis.type.EnumTypeHandler
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
     map-underscore-to-camel-case: true
