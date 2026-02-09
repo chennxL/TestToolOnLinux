@@ -84,34 +84,8 @@ public class PSIGrpcClient {
             Map<Long, Psi.LabelsType> srvData = convertBlacklistToSrvData(blacklistData);
 
             log.info("srv_data大小: {}", srvData.size());
-            //3.验证srv_data内容（发送前检查）
-            int verifyCount = 0;
-            for (Map.Entry<Long, Psi.LabelsType> entry : srvData.entrySet()) {
-                if (verifyCount >= 3) break;
-
-                Long key = entry.getKey();
-                Psi.LabelsType labels = entry.getValue();
-
-                log.info("srv_data[{}]:", verifyCount);
-                log.info("  key(hash): {}", key);
-                log.info("  labels.count: {}", labels.getLabelsCount());
-
-                if (labels.getLabelsCount() > 0) {
-                    long firstLabel = labels.getLabels(0);
-                    log.info("  labels[0]: {}", firstLabel);
-                    log.info("  labels[0] (hex): 0x{}", Long.toHexString(firstLabel));
-                    log.info("  labels[0] (binary): {}", Long.toBinaryString(firstLabel));
-
-                    // 验证解码
-                    int level = (int)(firstLabel & 0xFF);
-                    int count = (int)((firstLabel >> 8) & 0xFF);
-                    log.info("  验证解码: 评级={}, 记录数={}", level, count);
-                }
-
-                verifyCount++;
-            }
-            log.info("================================");
-
+            // ✅ 立即清理blacklistData（已经转换完了）
+            blacklistData.clear();
             // 4. 构建请求
             log.info("构建gRPC请求...");
             log.info("PSI参数 - weight: {}, effectiveLambda: {}, logPolyMod: {}",
@@ -129,26 +103,11 @@ public class PSIGrpcClient {
 
             log.info("请求大小: {} 字节", request.getSerializedSize());
 
-            // 🔥 5. 打印请求中的srv_data（确认序列化正确）
-            log.info("========== 请求中的srv_data验证 ==========");
-            Map<Long, Psi.LabelsType> requestSrvData = request.getSrvDataMap();
-            log.info("request.srv_data.size: {}", requestSrvData.size());
+            // ✅ 立即清理srvData（已经复制到request中了）
+            srvData.clear();
+            srvData = null;
 
-            verifyCount = 0;
-            for (Map.Entry<Long, Psi.LabelsType> entry : requestSrvData.entrySet()) {
-                if (verifyCount >= 3) break;
-
-                log.info("request.srv_data[{}]:", verifyCount);
-                log.info("  key: {}", entry.getKey());
-                log.info("  labels: {}", entry.getValue().getLabelsList());
-
-                verifyCount++;
-            }
-            log.info("==========================================");
-
-            log.info("调用C++服务器...");
-
-            // 6. 调用gRPC（设置10分钟超时）
+            // 6. 调用gRPC（设置15分钟超时）
             Psi.EncryptResponse response = blockingStub
                     .withDeadlineAfter(15, TimeUnit.MINUTES)
                     .doMatch(request);

@@ -248,7 +248,10 @@ public class TestSetServiceImpl implements TestSetService {
         try {
             // 1. 从数据库查询黑名单完整数据（主表 + 行为记录）
             log.info("查询黑名单完整数据...");
+            long step1Start = System.currentTimeMillis();
             List<BlacklistFullInfo> blacklistFullData = queryAllBlacklistWithRecords();
+            long step1Time = System.currentTimeMillis() - step1Start;
+            log.info("步骤1-查询数据库耗时: {}ms", step1Time);
 
             if (blacklistFullData.isEmpty()) {
                 throw new BusinessException(400, "黑名单库为空");
@@ -258,11 +261,14 @@ public class TestSetServiceImpl implements TestSetService {
 
             // 2. 调用gRPC进行PSI匹配（传递完整数据）
             log.info("调用gRPC进行PSI匹配...");
+            long step2Start = System.currentTimeMillis();
             String encryptedResult = psiGrpcClient.doMatch(contextData, payloadData, blacklistFullData,
                 weight,           // 新增
                 effectiveLambda,  // 新增
                 logPolyMod        // 新增
                 );
+            long step2Time = System.currentTimeMillis() - step2Start;
+            log.info("步骤2-gRPC调用耗时: {}ms", step2Time);
 
             // 3. 解析匹配数量（需要根据C++服务器返回的格式来解析）
             // 暂时返回0，后续需要实现解析逻辑
@@ -270,12 +276,20 @@ public class TestSetServiceImpl implements TestSetService {
 
             long endTime = System.currentTimeMillis();
             log.info("查询完成，耗时: {}ms, 匹配数: {}", endTime - startTime, matchCount);
+            
+            // ✅ 关键：立即释放大对象的引用
+            int dataSize = blacklistFullData.size();
+            blacklistFullData.clear();  // 清空List
+            blacklistFullData = null;   // 释放引用
 
             // 4. 构建返回结果
             QueryResultDTO result = new QueryResultDTO();
             result.setEncryptedResult(encryptedResult);  // 返回给Qt用于解密
             result.setMatchCount(matchCount);
-            result.setTotalCount(blacklistFullData.size());
+            result.setTotalCount(dataSize);
+            
+            // ✅ 主动触发GC（临时方案）
+            System.gc();
 
             return result;
 
